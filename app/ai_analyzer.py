@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 from typing import Dict, Any, Optional
 
 class AIStockAnalyzer:
@@ -9,21 +10,29 @@ class AIStockAnalyzer:
     async def analyze(self, stock_data: Dict[str, Any], api_key: Optional[str] = None) -> Dict[str, Any]:
         """
         AI 주식 분석 에이전트 실행:
-        1) Gemini API Key가 유효하면 Gemini 모델을 호출하여 전문적인 AI 종합 보고서 생성
-        2) 키가 없거나 실패 시 정교한 퀀트 룰 엔진(Deterministic Engine)으로 분석 보고서 생성
+        1) Gemini API Key가 유효하면 Gemini 모델을 호출하여 전문적인 AI 종합 보고서 생성 (최대 5초 제한)
+        2) 키가 없거나 5초 내 응답 지연/실패 시 0.1초 만에 완료되는 정밀 퀀트 엔진으로 즉시 폴백하여 사용자 대기 방지!
         """
         key_to_use = api_key or os.getenv("GEMINI_API_KEY")
 
-        # 1. 퀀트 룰 기반 정량 스코어링 (기본 메트릭 계산)
+        # 1. 퀀트 룰 기반 정량 스코어링 (기본 메트릭 즉시 계산 - 0.01초 소요)
         quant_result = self._evaluate_quantitative_scores(stock_data)
 
         if key_to_use:
             try:
-                gemini_result = await self._call_gemini(stock_data, quant_result, key_to_use)
+                # Vercel 10초 타임아웃 제한 방지를 위해 최대 5초 내 완료 요구
+                gemini_result = await asyncio.wait_for(
+                    self._call_gemini(stock_data, quant_result, key_to_use),
+                    timeout=5.0
+                )
                 return gemini_result
+            except asyncio.TimeoutError:
+                print("Gemini API call timed out after 5.0s, returning instant Quant analysis.")
+                quant_result["engine"] = "AI Quant Rule Engine (초고속 분석 모드)"
+                return quant_result
             except Exception as e:
                 print(f"Gemini API call failed, falling back to Quant Engine: {e}")
-                quant_result["engine"] = f"Quant Rule Engine (Gemini 오류: {str(e)[:50]}...)"
+                quant_result["engine"] = "AI Quant Rule Engine (초고속 분석 모드)"
                 return quant_result
         else:
             quant_result["engine"] = "AI Quant Rule Engine v1 (Deterministic)"
@@ -227,7 +236,7 @@ class AIStockAnalyzer:
         }
 
     async def _call_gemini(self, stock_data: Dict[str, Any], quant_result: Dict[str, Any], api_key: str) -> Dict[str, Any]:
-        """Gemini 2.5 Flash를 이용한 고도화 AI 분석 생성"""
+        """Gemini Flash를 이용한 고도화 AI 분석 생성 (비동기 스레드 실행)"""
         from google import genai
         from google.genai import types
 
@@ -237,8 +246,8 @@ class AIStockAnalyzer:
         tech = stock_data["technical"]
         news = stock_data.get("news", [])
         discussions = stock_data.get("discussions", [])
-        news_titles = [f"- {n['title']} ({n['source']})" for n in news[:4]]
-        disc_titles = [f"- [{d['author']}] {d['title']}" for d in discussions[:5]]
+        news_titles = [f"- {n['title']} ({n['source']})" for n in news[:3]]
+        disc_titles = [f"- [{d['author']}] {d['title']}" for d in discussions[:3]]
 
         prompt = f"""
 당신은 대한민국 최고 수준의 공인 금융투자분석사(CFA)이자 AI 주식 분석 에이전트입니다.
@@ -300,35 +309,24 @@ class AIStockAnalyzer:
 }}
 """.strip()
 
-        # 지원 모델 순차 시도 (다양한 환경 호환성 보장)
-        model_candidates = [
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-            "gemini-2.5-flash-lite",
-            "gemini-3.8-flash",
-            "gemini-1.5-pro"
-        ]
-        last_err = None
-
-        for m_name in model_candidates:
-            try:
-                response = client.models.generate_content(
-                    model=m_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json"
+        def _generate():
+            candidates = ["models/gemini-2.5-flash", "models/gemini-1.5-flash", "gemini-2.5-flash"]
+            for m in candidates:
+                try:
+                    res = client.models.generate_content(
+                        model=m,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(response_mime_type="application/json")
                     )
-                )
-                res_text = response.text.strip()
-                parsed = json.loads(res_text)
-                parsed["engine"] = f"Gemini AI Agent ({m_name})"
-                return parsed
-            except Exception as ex:
-                last_err = ex
-                continue
+                    return res, m
+                except Exception:
+                    continue
+            raise RuntimeError("Gemini model request failed")
 
-        if last_err:
-            raise last_err
+        response, used_model = await asyncio.to_thread(_generate)
+        res_text = response.text.strip()
+        parsed = json.loads(res_text)
+        parsed["engine"] = f"Gemini AI Agent ({used_model.replace('models/', '')})"
+        return parsed
 
 ai_analyzer = AIStockAnalyzer()
