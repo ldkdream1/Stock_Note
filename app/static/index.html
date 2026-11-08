@@ -10,6 +10,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Supabase JS Client CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -66,22 +68,39 @@
             <h1 class="text-sm sm:text-lg font-bold tracking-tight text-white">AI 주식 분석</h1>
             <span class="px-1.5 py-0.2 text-[10px] sm:text-xs font-semibold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">v1.0</span>
           </div>
-          <p class="hidden sm:block text-xs text-slate-400">실시간 데이터 기반 기술적·펀더멘털 AI 심층 진단</p>
+          <p class="hidden sm:block text-xs text-slate-400">데이터 기반 기술적·펀더멘털 AI 심층 진단</p>
         </div>
       </div>
 
-      <div class="flex items-center space-x-2">
+      <div class="flex items-center space-x-1.5 sm:space-x-2.5">
         <!-- Engine Status Badge -->
-        <div id="engine-badge" class="flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+        <div id="engine-badge" class="hidden sm:flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           <span id="engine-name" class="truncate max-w-[100px] sm:max-w-none">AI Quant</span>
         </div>
         
         <!-- API Key Modal Trigger -->
-        <button id="btn-open-settings" class="p-2 sm:px-3 sm:py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center space-x-1">
+        <button id="btn-open-settings" class="p-1.5 sm:px-2.5 sm:py-1 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center space-x-1" title="Gemini API Key 설정">
           <i data-lucide="settings" class="w-4 h-4 text-indigo-400"></i>
-          <span class="hidden sm:inline">API Key</span>
+          <span class="hidden md:inline">API Key</span>
         </button>
+
+        <!-- Auth Section (Supabase) -->
+        <div id="auth-container" class="flex items-center space-x-1.5">
+          <!-- Logged Out State -->
+          <button id="btn-open-auth" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 transition flex items-center space-x-1">
+            <i data-lucide="user" class="w-3.5 h-3.5"></i>
+            <span>로그인</span>
+          </button>
+
+          <!-- Logged In State (Hidden by default) -->
+          <div id="user-profile" class="hidden flex items-center space-x-1.5">
+            <span id="user-email-display" class="hidden sm:inline-block text-[11px] text-slate-300 bg-slate-800 px-2.5 py-1 rounded-full border border-slate-700 font-medium truncate max-w-[130px]">user@email</span>
+            <button id="btn-logout" class="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 border border-slate-800 transition">
+              로그아웃
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </header>
@@ -90,7 +109,7 @@
   <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6 space-y-4 sm:space-y-6">
 
     <!-- Search Section -->
-    <div class="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-3.5 sm:p-6 shadow-xl">
+    <div class="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-3.5 sm:p-6 shadow-xl space-y-3">
       <div class="max-w-3xl mx-auto space-y-2.5 sm:space-y-3">
         <label for="ticker-input" class="hidden sm:block text-xs sm:text-sm font-medium text-slate-300">
           종목명 또는 6자리 종목코드 입력
@@ -121,7 +140,20 @@
           </div>
         </div>
 
-        <!-- Quick Recommend Chips (Mobile Horizontal Scrollable) -->
+        <!-- 1. My Watchlist Chips (관심종목 슬라이더 - 로그인 시 노출) -->
+        <div id="watchlist-wrapper" class="hidden pt-1 border-t border-slate-800/80">
+          <div class="flex items-center space-x-1.5 overflow-x-auto no-scrollbar text-xs">
+            <span class="font-semibold text-amber-400 flex items-center space-x-1 flex-shrink-0 text-[11px] sm:text-xs">
+              <i data-lucide="star" class="w-3.5 h-3.5 fill-amber-400 text-amber-400"></i>
+              <span>내 관심종목:</span>
+            </span>
+            <div id="watchlist-chips" class="flex items-center space-x-1.5">
+              <!-- JS injected chips -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Quick Recommend Chips (기본 추천 종목) -->
         <div class="flex items-center space-x-1.5 overflow-x-auto no-scrollbar pt-0.5 text-xs text-slate-400">
           <span class="font-medium text-slate-500 flex-shrink-0 text-[11px] sm:text-xs">추천:</span>
           <button class="quick-chip flex-shrink-0 px-2.5 py-1 rounded-full bg-slate-800/80 hover:bg-indigo-600/20 hover:text-indigo-300 border border-slate-700 text-xs transition" data-ticker="삼성전자">삼성전자</button>
@@ -160,13 +192,19 @@
       <!-- 1. Stock Overview Header Card -->
       <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <!-- Left: Stock Name & Badges -->
+          <!-- Left: Stock Name & Badges & Favorite Button -->
           <div>
             <div class="flex items-center flex-wrap gap-1.5 sm:gap-2">
               <h2 id="stock-name" class="text-xl sm:text-3xl font-extrabold text-white tracking-tight">--</h2>
               <span id="stock-code" class="px-1.5 py-0.5 text-[11px] sm:text-xs font-mono font-semibold rounded bg-slate-800 text-slate-300 border border-slate-700">000000</span>
               <span id="stock-market" class="px-1.5 py-0.5 text-[10px] sm:text-xs font-semibold rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">KOSPI</span>
               <span id="stock-sector" class="px-1.5 py-0.5 text-[10px] sm:text-xs rounded bg-slate-800 text-slate-400">전기전자</span>
+
+              <!-- Favorite Toggle Button -->
+              <button id="btn-toggle-fav" class="ml-1 sm:ml-2 px-2.5 py-1 rounded-full text-xs font-semibold border transition flex items-center space-x-1 bg-slate-800/80 text-slate-300 border-slate-700 hover:text-amber-300">
+                <i data-lucide="star" id="fav-icon" class="w-3.5 h-3.5 text-slate-400"></i>
+                <span id="fav-text">관심종목 담기</span>
+              </button>
             </div>
             <p id="stock-desc" class="text-[11px] sm:text-xs text-slate-400 mt-1">시가총액 <span id="stock-market-cap" class="text-slate-200 font-semibold">--</span> (순위 <span id="stock-market-rank" class="text-slate-200 font-semibold">--</span>)</p>
           </div>
@@ -558,7 +596,7 @@
     <p>AI 주식 분석 에이전트 v1 • 본 분석 정보는 투자 참고용이며 투자 판단에 대한 최종 책임은 본인에게 있습니다.</p>
   </footer>
 
-  <!-- Gemini API Key Modal -->
+  <!-- 1. Gemini API Key Modal -->
   <div id="settings-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4">
       <div class="flex items-center justify-between">
@@ -585,6 +623,69 @@
       <div class="flex justify-end space-x-2 pt-2">
         <button id="btn-clear-key" class="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white">초기화</button>
         <button id="btn-save-key" class="px-5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Auth Modal (Supabase 로그인 / 회원가입) -->
+  <div id="auth-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 sm:p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm sm:text-base font-bold text-white flex items-center space-x-2">
+          <i data-lucide="log-in" class="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400"></i>
+          <span id="auth-modal-title">로그인</span>
+        </h3>
+        <button id="btn-close-auth-modal" class="p-1 text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-400 leading-relaxed">
+        로그인하시면 <strong>어떤 스마트폰이나 PC에서 접속해도 내 관심 종목이 자동으로 동기화</strong>됩니다.
+      </p>
+
+      <!-- Auth Form -->
+      <form id="auth-form" class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">이메일 주소</label>
+          <input 
+            type="email" 
+            id="auth-email" 
+            required 
+            placeholder="name@example.com"
+            class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-indigo-500 outline-none"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">비밀번호</label>
+          <input 
+            type="password" 
+            id="auth-password" 
+            required 
+            minlength="6"
+            placeholder="6자리 이상 비밀번호"
+            class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-indigo-500 outline-none"
+          />
+        </div>
+
+        <div id="auth-error-msg" class="hidden text-xs text-rose-400 bg-rose-950/40 p-2.5 rounded-lg border border-rose-800/60">
+        </div>
+
+        <button 
+          type="submit" 
+          id="btn-auth-submit" 
+          class="w-full py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition flex items-center justify-center space-x-1"
+        >
+          <span>로그인</span>
+        </button>
+      </form>
+
+      <!-- Toggle Sign In / Sign Up -->
+      <div class="pt-2 text-center border-t border-slate-800 text-xs text-slate-400">
+        <span id="auth-toggle-prompt">계정이 없으신가요?</span>
+        <button id="btn-toggle-auth-mode" class="ml-1 text-indigo-400 hover:text-indigo-300 font-semibold underline">
+          회원가입
+        </button>
       </div>
     </div>
   </div>
