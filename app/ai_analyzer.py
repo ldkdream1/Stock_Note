@@ -300,18 +300,35 @@ class AIStockAnalyzer:
 }}
 """.strip()
 
-        # 모델 호출
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json"
-            )
-        )
+        # 지원 모델 순차 시도 (다양한 환경 호환성 보장)
+        model_candidates = [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-3.8-flash",
+            "gemini-1.5-pro"
+        ]
+        last_err = None
 
-        res_text = response.text.strip()
-        parsed = json.loads(res_text)
-        parsed["engine"] = "Gemini 2.5 Flash AI Agent"
-        return parsed
+        for m_name in model_candidates:
+            try:
+                response = client.models.generate_content(
+                    model=m_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json"
+                    )
+                )
+                res_text = response.text.strip()
+                parsed = json.loads(res_text)
+                parsed["engine"] = f"Gemini AI Agent ({m_name})"
+                return parsed
+            except Exception as ex:
+                last_err = ex
+                continue
+
+        if last_err:
+            raise last_err
 
 ai_analyzer = AIStockAnalyzer()
