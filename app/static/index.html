@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>AI 주식 분석 에이전트 v1</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            },
+            kr_up: '#ef4444',     // 한국 증시 상승 빨간색
+            kr_down: '#3b82f6',   // 한국 증시 하락 파란색
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white pb-10">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800/80 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-2.5">
+        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 flex-shrink-0">
+          <i data-lucide="trending-up" class="w-4 h-4 sm:w-6 sm:h-6 text-white"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-1.5">
+            <h1 class="text-sm sm:text-lg font-bold tracking-tight text-white">AI 주식 분석</h1>
+            <span class="px-1.5 py-0.2 text-[10px] sm:text-xs font-semibold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">v1.0</span>
+          </div>
+          <p class="hidden sm:block text-xs text-slate-400">실시간 데이터 기반 기술적·펀더멘털 AI 심층 진단</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2">
+        <!-- Engine Status Badge -->
+        <div id="engine-badge" class="flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="engine-name" class="truncate max-w-[100px] sm:max-w-none">AI Quant</span>
+        </div>
+        
+        <!-- API Key Modal Trigger -->
+        <button id="btn-open-settings" class="p-2 sm:px-3 sm:py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center space-x-1">
+          <i data-lucide="settings" class="w-4 h-4 text-indigo-400"></i>
+          <span class="hidden sm:inline">API Key</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6 space-y-4 sm:space-y-6">
+
+    <!-- Search Section -->
+    <div class="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-3.5 sm:p-6 shadow-xl">
+      <div class="max-w-3xl mx-auto space-y-2.5 sm:space-y-3">
+        <label for="ticker-input" class="hidden sm:block text-xs sm:text-sm font-medium text-slate-300">
+          종목명 또는 6자리 종목코드 입력
+        </label>
+        
+        <!-- Search Input Bar -->
+        <div class="relative">
+          <div class="relative flex items-center">
+            <i data-lucide="search" class="w-4 h-4 sm:w-5 sm:h-5 text-slate-400 absolute left-3.5 pointer-events-none"></i>
+            <input 
+              type="text" 
+              id="ticker-input" 
+              placeholder="종목명 또는 코드 (예: 삼성전자, 현대엘리베이터, 산일전기)" 
+              autocomplete="off"
+              class="w-full bg-slate-950/80 text-white pl-10 pr-20 sm:pr-24 py-2.5 sm:py-3.5 rounded-xl border border-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm sm:text-base outline-none transition placeholder:text-slate-500"
+            />
+            <button 
+              id="btn-analyze" 
+              class="absolute right-1.5 sm:right-2 px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs sm:text-sm transition shadow-md shadow-indigo-600/30 flex items-center space-x-1 disabled:opacity-50"
+            >
+              <span>분석</span>
+              <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+
+          <!-- Auto-complete Dropdown -->
+          <div id="autocomplete-list" class="hidden absolute top-full left-0 right-0 mt-1.5 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-slate-800 max-h-60 overflow-y-auto">
+          </div>
+        </div>
+
+        <!-- Quick Recommend Chips (Mobile Horizontal Scrollable) -->
+        <div class="flex items-center space-x-1.5 overflow-x-auto no-scrollbar pt-0.5 text-xs text-slate-400">
+          <span class="font-medium text-slate-500 flex-shrink-0 text-[11px] sm:text-xs">추천:</span>
+          <button class="quick-chip flex-shrink-0 px-2.5 py-1 rounded-full bg-slate-800/80 hover:bg-indigo-600/20 hover:text-indigo-300 border border-slate-700 text-xs transition" data-ticker="삼성전자">삼성전자</button>
+          <button class="quick-chip flex-shrink-0 px-2.5 py-1 rounded-full bg-slate-800/80 hover:bg-indigo-600/20 hover:text-indigo-300 border border-slate-700 text-xs transition" data-ticker="현대엘리베이터">현대엘리베이터</button>
+          <button class="quick-chip flex-shrink-0 px-2.5 py-1 rounded-full bg-slate-800/80 hover:bg-indigo-600/20 hover:text-indigo-300 border border-slate-700 text-xs transition" data-ticker="산일전기">산일전기</button>
+          <button class="quick-chip flex-shrink-0 px-2.5 py-1 rounded-full bg-slate-800/80 hover:bg-indigo-600/20 hover:text-indigo-300 border border-slate-700 text-xs transition" data-ticker="SK하이닉스">SK하이닉스</button>
+          <button class="quick-chip flex-shrink-0 px-2.5 py-1 rounded-full bg-slate-800/80 hover:bg-indigo-600/20 hover:text-indigo-300 border border-slate-700 text-xs transition" data-ticker="알테오젠">알테오젠</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Skeleton -->
+    <div id="loading-state" class="hidden py-16 sm:py-20 flex flex-col items-center justify-center space-y-4">
+      <div class="relative w-14 h-14 sm:w-16 sm:h-16">
+        <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin"></div>
+        <div class="absolute inset-0 flex items-center justify-center">
+          <i data-lucide="cpu" class="w-5 h-5 sm:w-6 sm:h-6 text-indigo-400 animate-pulse"></i>
+        </div>
+      </div>
+      <div class="text-center px-4">
+        <p class="text-sm sm:text-base font-semibold text-white">AI 에이전트가 주식 데이터를 분석 중입니다...</p>
+        <p class="text-[11px] sm:text-xs text-slate-400 mt-1">실시간 시세 ➔ 캔들 지표 산출 ➔ 뉴스 & 주주 토론방 분석</p>
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div id="error-state" class="hidden p-5 sm:p-6 rounded-2xl bg-rose-950/30 border border-rose-800 text-center space-y-2">
+      <i data-lucide="alert-circle" class="w-6 h-6 sm:w-8 sm:h-8 text-rose-400 mx-auto"></i>
+      <h3 class="text-sm sm:text-base font-semibold text-rose-300" id="error-title">분석 실패</h3>
+      <p class="text-xs text-rose-400" id="error-message">종목명을 찾을 수 없습니다.</p>
+    </div>
+
+    <!-- Dashboard Content (Visible after analyze) -->
+    <div id="dashboard-content" class="space-y-4 sm:space-y-6 hidden">
+
+      <!-- 1. Stock Overview Header Card -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <!-- Left: Stock Name & Badges -->
+          <div>
+            <div class="flex items-center flex-wrap gap-1.5 sm:gap-2">
+              <h2 id="stock-name" class="text-xl sm:text-3xl font-extrabold text-white tracking-tight">--</h2>
+              <span id="stock-code" class="px-1.5 py-0.5 text-[11px] sm:text-xs font-mono font-semibold rounded bg-slate-800 text-slate-300 border border-slate-700">000000</span>
+              <span id="stock-market" class="px-1.5 py-0.5 text-[10px] sm:text-xs font-semibold rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">KOSPI</span>
+              <span id="stock-sector" class="px-1.5 py-0.5 text-[10px] sm:text-xs rounded bg-slate-800 text-slate-400">전기전자</span>
+            </div>
+            <p id="stock-desc" class="text-[11px] sm:text-xs text-slate-400 mt-1">시가총액 <span id="stock-market-cap" class="text-slate-200 font-semibold">--</span> (순위 <span id="stock-market-rank" class="text-slate-200 font-semibold">--</span>)</p>
+          </div>
+
+          <!-- Right: Price & Fluctuation -->
+          <div class="flex items-baseline sm:items-end justify-between sm:justify-start flex-row sm:flex-col border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-800/80">
+            <div class="flex items-baseline space-x-1.5 sm:space-x-2">
+              <span id="stock-price" class="text-2xl sm:text-4xl font-extrabold tracking-tight text-white">0</span>
+              <span class="text-xs sm:text-sm text-slate-400 font-medium">원</span>
+            </div>
+            <div id="price-diff-wrapper" class="flex items-center space-x-1.5 text-xs sm:text-sm font-semibold">
+              <span id="price-diff">--</span>
+              <span id="diff-rate">(--%)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Metrics Bar (Mobile 3-col Grid) -->
+        <div class="grid grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-slate-800 text-[11px] sm:text-xs">
+          <div class="bg-slate-950/50 p-2 sm:p-2.5 rounded-xl border border-slate-800/80">
+            <span class="text-slate-400 block text-[10px] sm:text-xs">PER</span>
+            <span id="metric-per" class="text-xs sm:text-sm font-bold text-slate-200 mt-0.5 block truncate">--배</span>
+          </div>
+          <div class="bg-slate-950/50 p-2 sm:p-2.5 rounded-xl border border-slate-800/80">
+            <span class="text-slate-400 block text-[10px] sm:text-xs">PBR</span>
+            <span id="metric-pbr" class="text-xs sm:text-sm font-bold text-slate-200 mt-0.5 block truncate">--배</span>
+          </div>
+          <div class="bg-slate-950/50 p-2 sm:p-2.5 rounded-xl border border-slate-800/80">
+            <span class="text-slate-400 block text-[10px] sm:text-xs">배당수익률</span>
+            <span id="metric-div" class="text-xs sm:text-sm font-bold text-slate-200 mt-0.5 block truncate">--%</span>
+          </div>
+          <div class="bg-slate-950/50 p-2 sm:p-2.5 rounded-xl border border-slate-800/80">
+            <span class="text-slate-400 block text-[10px] sm:text-xs">외인보유율</span>
+            <span id="metric-foreign" class="text-xs sm:text-sm font-bold text-slate-200 mt-0.5 block truncate">--%</span>
+          </div>
+          <div class="bg-slate-950/50 p-2 sm:p-2.5 rounded-xl border border-slate-800/80">
+            <span class="text-slate-400 block text-[10px] sm:text-xs">52주 최고</span>
+            <span id="metric-high52" class="text-xs sm:text-sm font-bold text-slate-200 mt-0.5 block truncate">--원</span>
+          </div>
+          <div class="bg-slate-950/50 p-2 sm:p-2.5 rounded-xl border border-slate-800/80">
+            <span class="text-slate-400 block text-[10px] sm:text-xs">52주 최저</span>
+            <span id="metric-low52" class="text-xs sm:text-sm font-bold text-slate-200 mt-0.5 block truncate">--원</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. AI Overall Investment Diagnosis Card -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
+        
+        <!-- Left: AI Score & Opinion (5 cols) -->
+        <div class="lg:col-span-5 bg-gradient-to-b from-indigo-950/40 via-slate-900 to-slate-900 border border-indigo-500/30 rounded-2xl p-4 sm:p-6 shadow-xl flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-1.5 sm:space-x-2">
+                <i data-lucide="shield-check" class="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400"></i>
+                <h3 class="text-xs sm:text-sm font-bold text-indigo-300 uppercase tracking-wider">AI 종합 투자 진단</h3>
+              </div>
+              <span id="ai-engine-tag" class="text-[10px] sm:text-[11px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">AI Quant</span>
+            </div>
+
+            <!-- Big Score & Opinion Badge (Mobile Compact Flex) -->
+            <div class="mt-4 sm:mt-6 flex items-center space-x-4 sm:space-x-6">
+              <div class="relative w-20 h-20 sm:w-28 sm:h-28 flex-shrink-0 flex items-center justify-center">
+                <svg class="w-20 h-20 sm:w-28 sm:h-28 transform -rotate-90" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="42" stroke="currentColor" stroke-width="8" class="text-slate-800" fill="transparent" />
+                  <circle id="score-circle" cx="50" cy="50" r="42" stroke="currentColor" stroke-width="8" class="text-indigo-500" stroke-linecap="round" fill="transparent" stroke-dasharray="263.9" stroke-dashoffset="60" />
+                </svg>
+                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                  <span id="ai-score" class="text-2xl sm:text-3xl font-black text-white">--</span>
+                  <span class="text-[9px] sm:text-[10px] text-slate-400 font-semibold uppercase">/ 100</span>
+                </div>
+              </div>
+
+              <div>
+                <span class="text-[11px] sm:text-xs text-slate-400 block font-medium">AI 에이전트 투자의견</span>
+                <div class="mt-0.5 sm:mt-1 flex items-center space-x-1.5 sm:space-x-2">
+                  <span id="ai-opinion-badge" class="px-2.5 sm:px-3.5 py-0.5 sm:py-1 text-xs sm:text-sm font-extrabold rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    BUY
+                  </span>
+                  <span id="ai-opinion-ko" class="text-sm sm:text-base font-bold text-white">매수 고려</span>
+                </div>
+                <p id="ai-action-desc" class="text-[11px] sm:text-xs text-slate-300 mt-1.5 sm:mt-2 leading-relaxed">
+                  상승 추세 모멘텀이 유효하며 분할 매수 접근이 유리합니다.
+                </p>
+              </div>
+            </div>
+
+            <!-- Target & Stop Loss Prices -->
+            <div class="mt-4 sm:mt-6 grid grid-cols-3 gap-1.5 sm:gap-2 p-2.5 sm:p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-center">
+              <div>
+                <span class="text-[10px] sm:text-[11px] text-slate-400 block">1차 목표</span>
+                <span id="target-price-1" class="text-xs sm:text-sm font-bold text-emerald-400 mt-0.5 block truncate">--원</span>
+              </div>
+              <div>
+                <span class="text-[10px] sm:text-[11px] text-slate-400 block">2차 목표</span>
+                <span id="target-price-2" class="text-xs sm:text-sm font-bold text-indigo-400 mt-0.5 block truncate">--원</span>
+              </div>
+              <div>
+                <span class="text-[10px] sm:text-[11px] text-slate-400 block">손절 기준</span>
+                <span id="stop-loss-price" class="text-xs sm:text-sm font-bold text-rose-400 mt-0.5 block truncate">--원</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4 Pillar Breakdown Bars -->
+          <div class="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-slate-800 space-y-2 text-xs">
+            <span class="font-semibold text-slate-300 block mb-1 text-[11px] sm:text-xs">4대 영역 정량 평가 (각 25점)</span>
+            <div>
+              <div class="flex justify-between text-slate-400 mb-0.5 text-[11px] sm:text-xs">
+                <span>기술적 추세 (차트/이평/RSI)</span>
+                <span id="score-tech" class="font-semibold text-slate-200">--/25</span>
+              </div>
+              <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                <div id="bar-tech" class="bg-indigo-500 h-1.5 rounded-full transition-all duration-700" style="width: 60%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-slate-400 mb-0.5 text-[11px] sm:text-xs">
+                <span>펀더멘털 & 밸류에이션</span>
+                <span id="score-val" class="font-semibold text-slate-200">--/25</span>
+              </div>
+              <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                <div id="bar-val" class="bg-purple-500 h-1.5 rounded-full transition-all duration-700" style="width: 70%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-slate-400 mb-0.5 text-[11px] sm:text-xs">
+                <span>외인·기관 수급 동향</span>
+                <span id="score-flow" class="font-semibold text-slate-200">--/25</span>
+              </div>
+              <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                <div id="bar-flow" class="bg-blue-500 h-1.5 rounded-full transition-all duration-700" style="width: 50%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-slate-400 mb-0.5 text-[11px] sm:text-xs">
+                <span>단기 모멘텀 & 거래량</span>
+                <span id="score-mom" class="font-semibold text-slate-200">--/25</span>
+              </div>
+              <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                <div id="bar-mom" class="bg-emerald-500 h-1.5 rounded-full transition-all duration-700" style="width: 65%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: AI Executive Summary & Action Strategy (7 cols) -->
+        <div class="lg:col-span-7 space-y-4 sm:space-y-6">
+          <!-- 3-Bullet Summary -->
+          <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl">
+            <div class="flex items-center space-x-2 mb-3 sm:mb-4">
+              <i data-lucide="file-text" class="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400"></i>
+              <h3 class="text-xs sm:text-sm font-bold text-slate-200 uppercase tracking-wider">AI 핵심 분석 3줄 요약</h3>
+            </div>
+            <ul id="ai-summary-list" class="space-y-2 sm:space-y-3 text-xs sm:text-sm text-slate-300">
+              <!-- JS injected -->
+            </ul>
+          </div>
+
+          <!-- Trading Strategy Guide -->
+          <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl">
+            <div class="flex items-center space-x-2 mb-2.5 sm:mb-3">
+              <i data-lucide="compass" class="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400"></i>
+              <h3 class="text-xs sm:text-sm font-bold text-slate-200 uppercase tracking-wider">AI 포트폴리오 매매 전략</h3>
+            </div>
+            <div id="ai-strategy-content" class="text-xs sm:text-sm text-slate-300 leading-relaxed whitespace-pre-line bg-slate-950/60 p-3 sm:p-4 rounded-xl border border-slate-800">
+              <!-- JS injected -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Interactive Chart Section (Line + SMA + Volume) -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 sm:p-6 shadow-xl">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 sm:pb-4 border-b border-slate-800 gap-1.5 sm:gap-2">
+          <div class="flex items-center space-x-1.5 sm:space-x-2">
+            <i data-lucide="bar-chart-2" class="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400"></i>
+            <h3 class="text-xs sm:text-sm font-bold text-slate-200 uppercase tracking-wider">주가 추이 및 이동평균선 차트</h3>
+          </div>
+          <div class="flex items-center space-x-2.5 text-[10px] sm:text-xs">
+            <span class="flex items-center space-x-1"><span class="w-2 h-2 rounded-full bg-slate-100"></span><span class="text-slate-400">종가</span></span>
+            <span class="flex items-center space-x-1"><span class="w-2 h-2 rounded-full bg-rose-500"></span><span class="text-slate-400">5일</span></span>
+            <span class="flex items-center space-x-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span><span class="text-slate-400">20일</span></span>
+            <span class="flex items-center space-x-1"><span class="w-2 h-2 rounded-full bg-indigo-500"></span><span class="text-slate-400">60일</span></span>
+          </div>
+        </div>
+        <div class="mt-3 sm:mt-4 relative h-60 sm:h-80 w-full">
+          <canvas id="priceChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 4. Technical Indicators Grid -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        
+        <!-- RSI Card -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 sm:p-5 shadow-xl flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] sm:text-xs font-semibold text-slate-400">RSI (14일)</span>
+            <span id="rsi-status-badge" class="px-1.5 py-0.2 text-[9px] sm:text-[10px] font-bold rounded bg-slate-800 text-slate-300">중립</span>
+          </div>
+          <div class="mt-2 sm:mt-3 flex items-baseline space-x-1">
+            <span id="tech-rsi" class="text-2xl sm:text-3xl font-extrabold text-white">--</span>
+            <span class="text-[10px] sm:text-xs text-slate-400">/ 100</span>
+          </div>
+          <p id="tech-rsi-desc" class="text-[10px] sm:text-xs text-slate-400 mt-1 sm:mt-2 line-clamp-1">
+            30 이하 과매도, 70 이상 과매수
+          </p>
+        </div>
+
+        <!-- MA Alignment Card -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 sm:p-5 shadow-xl flex flex-col justify-between">
+          <span class="text-[11px] sm:text-xs font-semibold text-slate-400">이평선 배열</span>
+          <div class="mt-2 sm:mt-3">
+            <span id="tech-ma-align" class="text-xs sm:text-base font-bold text-indigo-400 block leading-snug truncate">--</span>
+          </div>
+          <p id="tech-cross-signal" class="text-[10px] sm:text-xs text-slate-400 mt-1 sm:mt-2 line-clamp-1">
+            5일·20일·60일 배열 추세
+          </p>
+        </div>
+
+        <!-- Bollinger Band Card -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 sm:p-5 shadow-xl">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] sm:text-xs font-semibold text-slate-400">볼린저 (%B)</span>
+            <span id="tech-bb-pct" class="text-xs font-mono font-bold text-slate-200">--%</span>
+          </div>
+          <div class="mt-2 space-y-0.5 text-[10px] sm:text-xs">
+            <div class="flex justify-between text-slate-400">
+              <span>상단</span>
+              <span id="tech-bb-upper" class="font-semibold text-slate-200">--원</span>
+            </div>
+            <div class="flex justify-between text-slate-400">
+              <span>중단</span>
+              <span id="tech-bb-mid" class="font-semibold text-slate-200">--원</span>
+            </div>
+            <div class="flex justify-between text-slate-400">
+              <span>하단</span>
+              <span id="tech-bb-lower" class="font-semibold text-slate-200">--원</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Volume Momentum Card -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 sm:p-5 shadow-xl flex flex-col justify-between">
+          <span class="text-[11px] sm:text-xs font-semibold text-slate-400">거래량 모멘텀</span>
+          <div class="mt-2 sm:mt-3 flex items-baseline space-x-1">
+            <span id="tech-vol-ratio" class="text-2xl sm:text-3xl font-extrabold text-white">--</span>
+            <span class="text-[10px] sm:text-xs text-slate-400">%</span>
+          </div>
+          <p class="text-[10px] sm:text-xs text-slate-400 mt-1 sm:mt-2">
+            20일선 이격도: <span id="tech-disparity" class="font-semibold text-slate-200">--%</span>
+          </p>
+        </div>
+      </div>
+
+      <!-- 5. SWOT Analysis Grid -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-3 sm:space-y-4">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="grid" class="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400"></i>
+          <h3 class="text-xs sm:text-sm font-bold text-slate-200 uppercase tracking-wider">AI SWOT 심층 진단</h3>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <!-- Strengths -->
+          <div class="p-3 sm:p-4 rounded-xl bg-emerald-950/20 border border-emerald-800/40 space-y-1.5 sm:space-y-2">
+            <span class="text-xs font-bold text-emerald-400 flex items-center space-x-1.5">
+              <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+              <span>강점 (Strengths)</span>
+            </span>
+            <ul id="swot-strengths" class="text-xs text-slate-300 space-y-1 list-disc list-inside leading-relaxed"></ul>
+          </div>
+
+          <!-- Weaknesses -->
+          <div class="p-3 sm:p-4 rounded-xl bg-rose-950/20 border border-rose-800/40 space-y-1.5 sm:space-y-2">
+            <span class="text-xs font-bold text-rose-400 flex items-center space-x-1.5">
+              <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i>
+              <span>약점 (Weaknesses)</span>
+            </span>
+            <ul id="swot-weaknesses" class="text-xs text-slate-300 space-y-1 list-disc list-inside leading-relaxed"></ul>
+          </div>
+
+          <!-- Opportunities -->
+          <div class="p-3 sm:p-4 rounded-xl bg-blue-950/20 border border-blue-800/40 space-y-1.5 sm:space-y-2">
+            <span class="text-xs font-bold text-blue-400 flex items-center space-x-1.5">
+              <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+              <span>기회 (Opportunities)</span>
+            </span>
+            <ul id="swot-opportunities" class="text-xs text-slate-300 space-y-1 list-disc list-inside leading-relaxed"></ul>
+          </div>
+
+          <!-- Threats -->
+          <div class="p-3 sm:p-4 rounded-xl bg-amber-950/20 border border-amber-800/40 space-y-1.5 sm:space-y-2">
+            <span class="text-xs font-bold text-amber-400 flex items-center space-x-1.5">
+              <i data-lucide="alert-octagon" class="w-3.5 h-3.5"></i>
+              <span>위협 (Threats)</span>
+            </span>
+            <ul id="swot-threats" class="text-xs text-slate-300 space-y-1 list-disc list-inside leading-relaxed"></ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. Mobile Tab Switcher (모바일 전용 탭 전환 버튼) -->
+      <div class="block lg:hidden bg-slate-900 border border-slate-800 rounded-xl p-1 flex items-center space-x-1 text-xs font-medium">
+        <button id="tab-btn-trend" class="mobile-tab-btn flex-1 py-2 text-center rounded-lg bg-indigo-600 text-white font-semibold transition" data-target="col-deal-trend">
+          수급 동향
+        </button>
+        <button id="tab-btn-news" class="mobile-tab-btn flex-1 py-2 text-center rounded-lg text-slate-400 hover:text-white transition" data-target="col-news">
+          종목 뉴스
+        </button>
+        <button id="tab-btn-disc" class="mobile-tab-btn flex-1 py-2 text-center rounded-lg text-slate-400 hover:text-white transition flex items-center justify-center space-x-1" data-target="col-disc">
+          <span>토론방</span>
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        </button>
+      </div>
+
+      <!-- 7. Deal Trend & News & Discussion (Desktop: 3 cols / Mobile: Tabbed View) -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        
+        <!-- Institutional & Foreigner Deal Trend Table -->
+        <div id="col-deal-trend" class="mobile-tab-content bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col justify-between">
+          <div>
+            <div class="flex items-center space-x-2 mb-3 sm:mb-4">
+              <i data-lucide="users" class="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400"></i>
+              <h3 class="text-xs sm:text-sm font-bold text-slate-200 uppercase tracking-wider">최근 5거래일 외인·기관 매매동향</h3>
+            </div>
+            <div class="overflow-x-auto custom-scrollbar">
+              <table class="w-full text-xs text-left min-w-[280px]">
+                <thead class="text-slate-400 border-b border-slate-800">
+                  <tr>
+                    <th class="py-2">날짜</th>
+                    <th class="py-2 text-right">종가</th>
+                    <th class="py-2 text-right">외국인</th>
+                    <th class="py-2 text-right">기관</th>
+                    <th class="py-2 text-right">개인</th>
+                  </tr>
+                </thead>
+                <tbody id="deal-trend-body" class="divide-y divide-slate-800/50">
+                  <!-- JS injected -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <p class="text-[10px] sm:text-[11px] text-slate-500 mt-3 text-right">* 단위: 주 (일별 순매수)</p>
+        </div>
+
+        <!-- Recent News Feed -->
+        <div id="col-news" class="mobile-tab-content hidden lg:block bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
+          <div class="flex items-center justify-between mb-3 sm:mb-4">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="newspaper" class="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400"></i>
+              <h3 class="text-xs sm:text-sm font-bold text-slate-200 uppercase tracking-wider">최근 주요 종목 뉴스</h3>
+            </div>
+            <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400">네이버 증권</span>
+          </div>
+          <div id="news-list" class="space-y-2.5 custom-scrollbar max-h-80 overflow-y-auto pr-1">
+            <!-- JS injected -->
+          </div>
+        </div>
+
+        <!-- Naver Stock Community Discussion Feed -->
+        <div id="col-disc" class="mobile-tab-content hidden lg:block bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
+          <div class="flex items-center justify-between mb-3 sm:mb-4">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="message-square" class="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400"></i>
+              <h3 class="text-xs sm:text-sm font-bold text-slate-200 uppercase tracking-wider">주주 토론방 실시간 이슈</h3>
+            </div>
+            <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center space-x-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>LIVE</span>
+            </span>
+          </div>
+          <div id="discussion-list" class="space-y-2.5 custom-scrollbar max-h-80 overflow-y-auto pr-1">
+            <!-- JS injected -->
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Floating Scroll-To-Top Button for Mobile -->
+  <button id="btn-scroll-top" class="fixed bottom-4 right-4 w-10 h-10 rounded-full bg-indigo-600/90 text-white shadow-xl shadow-indigo-600/30 flex items-center justify-center opacity-0 pointer-events-none transition-all duration-300 z-30 sm:hidden">
+    <i data-lucide="arrow-up" class="w-5 h-5"></i>
+  </button>
+
+  <!-- Footer -->
+  <footer class="mt-auto border-t border-slate-800/80 py-4 text-center text-[11px] text-slate-500 px-4">
+    <p>AI 주식 분석 에이전트 v1 • 본 분석 정보는 투자 참고용이며 투자 판단에 대한 최종 책임은 본인에게 있습니다.</p>
+  </footer>
+
+  <!-- Gemini API Key Modal -->
+  <div id="settings-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm sm:text-base font-bold text-white flex items-center space-x-2">
+          <i data-lucide="settings" class="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400"></i>
+          <span>Gemini AI 엔진 설정</span>
+        </h3>
+        <button id="btn-close-modal" class="p-1 text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-400 leading-relaxed">
+        Google Gemini API Key를 입력하시면 LLM(Gemini 2.5 Flash) 기반의 맞춤형 고급 심층 리포트를 생성합니다. (키가 없어도 내장 퀀트 룰 엔진으로 100% 정상 작동합니다)
+      </p>
+      <div>
+        <label class="block text-xs font-semibold text-slate-300 mb-1">Gemini API Key</label>
+        <input 
+          type="password" 
+          id="gemini-key-input" 
+          placeholder="AIzaSy..." 
+          class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-indigo-500 outline-none"
+        />
+      </div>
+      <div class="flex justify-end space-x-2 pt-2">
+        <button id="btn-clear-key" class="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white">초기화</button>
+        <button id="btn-save-key" class="px-5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>

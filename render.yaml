@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: ai-stock-agent
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run.py
+    plan: free
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
